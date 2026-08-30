@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 环境变量 / 密钥（切勿提交）
+.env
+.env.local
+
+# OCR / 解析缓存（可重新生成，体积大）
+data/ocr_cache*.json
+data/pages/
+pages/
+output/cache/
+
+# 临时图片
+*.png
+*.jpeg
+*.jpg
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
