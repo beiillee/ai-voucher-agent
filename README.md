@@ -185,6 +185,23 @@ KEY_FIELD_MISSING、NON_UNIQUE_MATCH。
 为便于**开源 / 脱敏演示 / CI 自动化**，项目内置一份虚构样例数据，
 不依赖任何 confidential 真实文件、无需 Tesseract、无需 API Key 即可全链路运行。
 
+## 十二、部署到 Streamlit Cloud（免安装公网访问）
+
+把本仓库推到 GitHub 后，即可一键部署为**永久公网网页**，他人打开链接即用、无需安装任何环境。
+
+1. 将代码推到 GitHub（公开仓库）：
+   ```bash
+   git remote add origin https://github.com/<你的用户名>/ai-voucher-agent.git
+   git push -u origin master        # 或 git push -u origin main
+   ```
+2. 打开 [streamlit.io/cloud](https://streamlit.io/cloud) → 用 GitHub 登录 → **New app**。
+3. 选择本仓库，Main file path 填 `app.py` → **Deploy**。
+4. 约 1–2 分钟后获得 `https://<app>.streamlit.app` 永久链接。
+
+> 说明：云端默认环境未预装 Tesseract，**纯扫描件 OCR** 可能不可用；
+> 文字层 PDF 与账证核对逻辑均正常。如需云端也支持扫描件 OCR，
+> 在仓库根目录加 `packages.txt` 写入 `tesseract-ocr` 与 `tesseract-ocr-chi-sim` 即可。
+
 ### 1) 生成脱敏样例（可选，已附带）
 
 ```bash
