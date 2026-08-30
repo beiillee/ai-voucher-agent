@@ -137,10 +137,9 @@ def run(
 
 if __name__ == "__main__":
     import sys
-    pdf = sys.argv[1] if len(sys.argv) > 1 else \
-        "/root/uploads/1788011094935791699-2023-10-1211.pdf"
-    led = sys.argv[2] if len(sys.argv) > 2 else \
-        "/root/uploads/1788011095541198983-副本202301-202412序时账.xlsx"
+    # 不带参数运行时，使用仓库自带的脱敏样例（相对路径，任何电脑均可跑）
+    pdf = sys.argv[1] if len(sys.argv) > 1 else "data/sample_voucher.pdf"
+    led = sys.argv[2] if len(sys.argv) > 2 else "data/sample_ledger.xlsx"
     out = sys.argv[3] if len(sys.argv) > 3 else "output"  # 相对当前目录，便于随处运行
     res = run(pdf, led, output_dir=out)
     print("\n===== 结果摘要 =====")
