@@ -169,10 +169,73 @@ KEY_FIELD_MISSING、NON_UNIQUE_MATCH。
 
 每份结果都保留原始数据、提取结果、匹配依据、异常原因、confidence，确保**可溯源**。
 
-## 九、LLM（可选）
+## 九、接入大模型 LLM（可选增强）
 
-复制 `.env.example` 为 `.env`，填入 `OPENAI_API_KEY` 后，勾选「启用 LLM 异常解释」
-即可对异常生成自然语言说明。未配置时所有基础核对功能**照常运行**。
+> **当前默认状态：未接入。** 即使不配任何 Key，OCR、Excel 读取、字段映射、账证匹配、
+> 异常检测、报告生成**全部照常运行**（纯 Python 确定性实现）。LLM 只是「锦上添花」——
+> 它**只对异常生成 1-2 句中文自然语言解释**（可能成因 + 核查建议），
+> **不参与任何金额计算或核对决策**，也绝不修改结果。
+
+### 9.1 什么是 `OPENAI_BASE_URL`（重点概念）
+
+`openai` 这个 Python 库本身不绑定任何一家厂商，它只是按「OpenAI 兼容协议」发 HTTP 请求。
+决定请求发往哪家的，就是 `OPENAI_BASE_URL` 这个地址：
+
+| 配置项 | 作用 | 类比 |
+|---|---|---|
+| `OPENAI_API_KEY` | 身份凭证（证明“你是付费用户”） | 门禁卡 |
+| `OPENAI_BASE_URL` | 请求发往的服务地址（哪家模型） | 门禁卡刷的是哪栋楼 |
+| `LLM_MODEL` | 具体用哪个模型 | 楼里的哪个房间 |
+
+- 设为 `https://api.openai.com/v1` → 请求发到 **OpenAI**
+- 设为 `https://api.deepseek.com/v1` → 请求发到 **DeepSeek**
+- 设为本地 `http://localhost:11434/v1` → 请求发到 **本地 Ollama**
+
+> 因为本项目用的是「OpenAI 兼容协议」，所以 **DeepSeek / 通义 / 本地模型都能直接接，
+> 不用改任何代码**——只改这三个变量即可。
+
+### 9.2 接入步骤（以 DeepSeek 为例，最省事）
+
+**① 申请 Key**
+去 [platform.deepseek.com](https://platform.deepseek.com) 注册 → 「API Keys」→ 创建，
+复制形如 `sk-xxxx` 的密钥（充值几块钱即可用很久，比 OpenAI 便宜且国内直连）。
+
+**② 创建 `.env` 文件**（项目根目录，复制 `.env.example` 后改）
+```bash
+cp .env.example .env
+```
+然后编辑 `.env`，把方案 B 的三行取消注释并填好：
+```
+OPENAI_API_KEY=sk-你的DeepSeekKey
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+```
+> 注意：`.env` 已在 `.gitignore` 中，**不会被上传到 GitHub**，Key 不会泄露。
+
+**③ 启用并运行**
+- **网页版**：上传 PDF + Excel 后，勾选 **「启用 LLM 异常解释」** → 点「开始智能核对」。
+  结果报告的「🤖 LLM 异常解释」折叠区会出现每类异常的中文解读。
+- **命令行**：
+  ```bash
+  export OPENAI_API_KEY=sk-你的DeepSeekKey
+  export OPENAI_BASE_URL=https://api.deepseek.com/v1
+  export LLM_MODEL=deepseek-chat
+  python3.11 -m agent.orchestrator data/sample_voucher.pdf data/sample_ledger.xlsx
+  ```
+
+### 9.3 部署到 Streamlit Cloud 时如何带 Key
+云端不会读取你电脑的 `.env`。在 Streamlit Cloud 的 **App settings → Secrets** 里填：
+```toml
+OPENAI_API_KEY = "sk-你的DeepSeekKey"
+OPENAI_BASE_URL = "https://api.deepseek.com/v1"
+LLM_MODEL = "deepseek-chat"
+```
+部署后 LLM 解释功能自动生效。
+
+### 9.4 想让 LLM 真正参与核对决策？（进阶）
+当前 LLM 只做「解释」。若要让它参与**疑难凭证裁决 / 异常分类**，需在 `agent/orchestrator.py`
+中扩展：高置信度规则仍交给 Python，低置信度 / 模糊凭证转交 LLM 裁决，结果回写报告。
+这属于「规则 + LLM 混合架构」，可作为后续迭代方向。
 
 ## 十、合规与边界
 
