@@ -1,0 +1,48 @@
+name: Build Windows EXE
+
+# 本工作流在你把代码推到 GitHub 后，自动在 Windows 机器上把 agent 打包成 .exe
+# 触发方式：
+#   1) 手动：在 GitHub 仓库 Actions 标签页点 "Build Windows EXE" -> Run workflow
+#   2) 打标签：git tag v1.0.0 && git push --tags
+# 产物：在 Actions 运行结果的 Artifacts 里下载 voucher-agent-windows（含 voucher-agent.exe）
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖与 PyInstaller
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: 用 PyInstaller 打包为单文件 exe
+        run: >
+          pyinstaller --onefile --name voucher-agent
+          --hidden-import agent.orchestrator
+          --hidden-import tools.pdf_parser
+          --hidden-import tools.excel_analyzer
+          --hidden-import tools.voucher_extractor
+          --hidden-import tools.reconciliation
+          --hidden-import tools.anomaly_detector
+          --hidden-import tools.report_generator
+          --hidden-import tools.ocr
+          --collect-all openpyxl
+          main.py
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: voucher-agent-windows
+          path: dist/voucher-agent.exe

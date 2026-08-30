@@ -18,6 +18,9 @@
 ```
 ai_voucher_agent/
 ├── app.py                      # Streamlit 前端
+├── main.py                     # 命令行入口（可直接运行 / 打包成 exe）
+├── 启动网页版.bat               # Windows 一键启动网页（双击即用，需先装 Python）
+├── 启动网页版.command           # macOS 一键启动网页（双击即用，需先装 Python）
 ├── agent/
 │   ├── orchestrator.py         # Agent 编排器：按文件类型自主调度工具链
 │   └── prompts.py              # LLM 提示词（可选）
@@ -33,6 +36,7 @@ ai_voucher_agent/
 ├── output/                     # 核查结果 Excel（运行产物）
 ├── requirements.txt
 ├── .env.example
+├── .github/workflows/build-windows-exe.yml  # 推到 GitHub 后自动构建 Windows exe
 └── README.md
 ```
 
@@ -76,6 +80,38 @@ python3.11 -m agent.orchestrator \
 streamlit run app.py
 # 浏览器打开后上传 ① 凭证PDF ② 序时账Excel，点击「开始智能核对」
 ```
+
+### 3) 免敲命令：双击启动器（推荐给非技术用户）
+
+下载 zip 解压后，**无需记命令**：
+
+- **Windows**：双击 `启动网页版.bat` → 自动装依赖 → 自动开浏览器 `http://localhost:8501`
+- **macOS**：双击 `启动网页版.command` → 同上
+
+> 前提：本机已安装 **Python 3.11+**（Windows 安装时勾选 “Add python.exe to PATH”）。
+> 若不想装 Python，见下方「打包成 exe / 部署网页」方案。
+
+### 4) 打包成 exe（彻底免环境，给别人分发）
+
+本项目源码在 **Linux** 上开发，PyInstaller 只能打包出“当前系统”的可执行文件，
+因此**不能直接从这里生成 Windows 的 `.exe`**。正确做法是用仓库里已配好的
+`.github/workflows/build-windows-exe.yml`：**把代码推到 GitHub 后，GitHub 会在
+Windows 机器上自动构建 `.exe`**，在 Actions 运行结果的 Artifacts 里下载即可。
+
+```bash
+# 本地也能打包（需在自己电脑上，且与目标系统一致）：
+pip install pyinstaller
+pyinstaller --onefile --name voucher-agent main.py
+# 产物在 dist/voucher-agent(.exe)
+```
+
+双击 `voucher-agent.exe` → 按提示输入 PDF / Excel 路径 → 自动生成结果 Excel。
+
+### 5) 免安装网页（给别人在线试用）
+
+把 GitHub 仓库部署到 [Streamlit Cloud](https://streamlit.io/cloud)（连 GitHub 一键部署），
+他人即获得一个**永久公网网址**，打开就能传文件核对，连 Python 都不用装。
+
 
 ## 五、真实样例文件说明（已用于验证）
 
