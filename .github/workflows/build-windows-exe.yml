@@ -6,7 +6,7 @@ name: Build Windows EXE
 #   2) 打标签：git tag v1.0.0 && git push --tags
 # 产物：在 Actions 运行结果的 Artifacts 里下载 voucher-agent-windows（含 voucher-agent.exe）
 
-on:
+"on":
   workflow_dispatch:
   push:
     tags:
