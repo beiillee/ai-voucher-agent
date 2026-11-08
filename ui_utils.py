@@ -19,14 +19,8 @@ if str(ROOT) not in sys.path:
 
 OUTPUT_DIR = ROOT / "output"
 
-STATUS_CN = {
-    "MATCHED": "已匹配",
-    "DATE_MISMATCH": "日期不一致",
-    "AMOUNT_MISMATCH": "金额不一致",
-    "SUSPECTED": "疑似匹配",
-    "PDF_ONLY": "PDF有/账里无",
-    "OCR_UNCERTAIN": "凭证号未识别",
-}
+# 状态中文名统一从 schema 取，避免页面、报告、命令行各写一套对不上
+from tools.schema import MATCH_STATUS as STATUS_CN  # noqa: E402
 
 DISCLAIMER = """
 - 本工具是**财务资料核对辅助工具**，不声称能自动完成审计、自动判定财务造假或替代审计人员。

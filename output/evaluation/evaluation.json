@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-08 17:06:30",
+  "generated_at": "2026-11-08 17:20:29",
   "dataset": {
     "name": "data/demo_recon",
     "n_pdf_vouchers": 7,
@@ -323,16 +323,16 @@
     ]
   },
   "performance": {
-    "e2e_seconds_median": 0.123,
-    "e2e_seconds_min": 0.1,
-    "e2e_seconds_max": 0.47,
-    "peak_memory_mb": 3.7,
+    "e2e_seconds_median": 0.108,
+    "e2e_seconds_min": 0.101,
+    "e2e_seconds_max": 0.112,
+    "peak_memory_mb": 1.0,
     "repeats": 3,
     "batch_files": 2,
     "batch_ok": 2,
     "batch_failed": 0,
     "batch_failure_rate": 0.0,
-    "batch_seconds": 0.146
+    "batch_seconds": 0.031
   },
   "system_summary": {
     "total_ledger": 8,

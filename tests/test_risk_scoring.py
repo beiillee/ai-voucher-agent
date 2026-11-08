@@ -20,7 +20,7 @@ import openpyxl
 
 from tools.excel_analyzer import analyze_excel
 from tools.ledger_risk_analyzer import (
-    analyze_ledger_risk, LEVEL_WEIGHT, SIM_SIMILAR_MIN,
+    analyze_ledger_risk, LEVEL_WEIGHT, RISK_MIN_RECORDS, SIM_SIMILAR_MIN,
 )
 
 
@@ -92,9 +92,18 @@ class TestRiskScore(unittest.TestCase):
         s = risk["risk_score"]
         raw = sum(LEVEL_WEIGHT[k] * v for k, v in risk["by_level"].items())
         self.assertEqual(s["raw_weight"], raw)
-        expect_density = round(raw / len(records) * 100, 2)
+        denom = max(len(records), RISK_MIN_RECORDS)
+        expect_density = round(raw / denom * 100, 2)
         self.assertAlmostEqual(s["density"], expect_density, 2)
         self.assertAlmostEqual(s["score"], min(100.0, round(expect_density * 2, 1)), 1)
+
+    def test_small_ledger_not_pushed_to_max(self):
+        """小账套里 1 条线索不应直接把分数顶到 100。"""
+        records = [rec(f"记-{i:04d}", 50_000.0, "采购入库A公司") for i in range(16)]
+        risk = analyze_ledger_risk(records, has_date_dim=False)
+        self.assertGreater(risk["n_clues"], 0)
+        self.assertLess(risk["risk_score"]["score"], 100.0)
+        self.assertEqual(risk["risk_score"]["denominator"], RISK_MIN_RECORDS)
 
     def test_score_capped_at_100(self):
         records = []

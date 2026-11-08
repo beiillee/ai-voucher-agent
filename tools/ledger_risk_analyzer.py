@@ -599,6 +599,9 @@ def _structure_shift(records: list[dict], coverage: dict) -> tuple[list[dict], l
 LEVEL_ORDER = {"高": 0, "中": 1, "低": 2}
 # 风险评分的权重：只做「线索轻重」的量化，不代表违规概率，也不对外称风险等级
 LEVEL_WEIGHT = {"高": 10, "中": 4, "低": 1}
+# 评分分母的样本下限：几十条记录的小账套里，1 条线索就会把密度顶到最大值，
+# 用固定下限压一下，避免「小账套必然高危」这种由样本量造成的假象。
+RISK_MIN_RECORDS = 50
 TYPE_ORDER = {
     "DUPLICATE_TRANSACTION": 0,
     "SIMILAR_TRANSACTION": 1,
@@ -683,20 +686,26 @@ def _risk_score(by_level: dict, n_records: int) -> dict:
     可解释的风险评分。
 
     公式：raw = 高×10 + 中×4 + 低×1
-          密度 = raw / 记录数 × 100
+          密度 = raw / max(记录数, 50) × 100
           分数 = min(100, 密度 × 2)
+
+    分母设 50 条下限，是因为几十条记录的小账套里 1 条线索就会把密度顶到满值，
+    那不是风险高，只是样本少。
 
     用途只是把「线索多不多、重不重」折算成一个可比的数，便于不同账套之间粗比；
     它不代表违规概率，也不构成审计结论。公式与权重随结果一起返回，便于复核。
     """
     raw = sum(LEVEL_WEIGHT.get(k, 0) * v for k, v in by_level.items())
-    density = round(raw / n_records * 100, 2) if n_records else 0.0
+    denom = max(n_records, RISK_MIN_RECORDS)
+    density = round(raw / denom * 100, 2) if denom else 0.0
     score = round(min(100.0, density * 2), 1)
     return {
         "score": score,
         "raw_weight": raw,
         "density": density,
-        "formula": "raw=高×10+中×4+低×1; 密度=raw/记录数×100; 分数=min(100, 密度×2)",
+        "denominator": denom,
+        "formula": ("raw=高×10+中×4+低×1; 密度=raw/max(记录数,50)×100; "
+                    "分数=min(100, 密度×2)"),
         "level_weight": dict(LEVEL_WEIGHT),
         "disclaimer": "分数仅用于不同账套之间粗略比较，不代表违规概率或审计结论",
     }

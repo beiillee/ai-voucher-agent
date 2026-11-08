@@ -62,43 +62,71 @@ def _setup_llm_interactive() -> bool:
 def main() -> None:
     use_llm = False
 
-    if len(sys.argv) >= 3:
-        pdf = sys.argv[1]
-        led = sys.argv[2]
-        out = sys.argv[3] if len(sys.argv) > 3 else "output"
-        # 命令行模式：显式 --use-llm 且环境中有 Key 才启用
+    # 参数形态：若干 PDF + 一个 Excel + 可选输出目录
+    #   python3 main.py 凭证.pdf 序时账.xlsx
+    #   python3 main.py 一月.pdf 二月.pdf 序时账.xlsx output/
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    pdfs = [a for a in args if a.lower().endswith(".pdf")]
+    leds = [a for a in args if a.lower().endswith((".xlsx", ".xls"))]
+    others = [a for a in args if a not in pdfs and a not in leds]
+
+    if pdfs and leds:
+        led = leds[0]
+        out = others[0] if others else "output"
         if "--use-llm" in sys.argv and os.getenv("OPENAI_API_KEY"):
             use_llm = True
     else:
-        print("===== AI 财务凭证智能核对 Agent（命令行）=====")
-        pdf = _ask("请输入凭证 PDF 路径: ", "")
+        print("===== AI 财务凭证智能核查与风险分析系统（命令行）=====")
+        pdf = _ask("请输入凭证 PDF 路径（多个用英文逗号分隔）: ", "")
         led = _ask("请输入序时账 Excel 路径: ", "")
         out = _ask("输出目录(回车默认 output): ", "output")
+        pdfs = [p.strip() for p in pdf.replace("，", ",").split(",") if p.strip()]
         use_llm = _setup_llm_interactive()
 
-    if not pdf or not led:
+    if not pdfs or not led:
         print("[错误] 未提供凭证 PDF 或序时账 Excel 路径。")
         _pause()
         return
 
-    if not Path(pdf).exists():
-        print(f"[错误] 找不到 PDF 文件: {pdf}")
-        _pause()
-        return
+    for p in pdfs:
+        if not Path(p).exists():
+            print(f"[错误] 找不到 PDF 文件: {p}")
+            _pause()
+            return
     if not Path(led).exists():
         print(f"[错误] 找不到 Excel 文件: {led}")
         _pause()
         return
 
-    res = run(pdf, led, output_dir=out, use_llm=use_llm)
-    s = res["reconciliation"]["summary"]
-    print("\n===== 核对完成 =====")
-    print(f"PDF 凭证: {s['total_pdf']} | 序时账凭证: {s['total_ledger']}")
-    print(f"匹配成功: {s['matched']} | 金额不一致: {s['amount_mismatch']} | 仅 PDF 有: {s['pdf_only']}")
-    print(f"匹配率: {s['match_rate_pct']}% | 异常: {res['anomalies']['n_anomalies']}")
-    if res.get("llm_used"):
-        print("🤖 LLM 异常解释：已生成（见报告「异常清单」对应说明）")
-    print(f"报告已生成: {res['report_path']}")
+    if len(pdfs) == 1:
+        res = run(pdfs[0], led, output_dir=out, use_llm=use_llm)
+        s = res["reconciliation"]["summary"]
+        print("\n===== 核对完成 =====")
+        print(f"PDF 凭证: {s['total_pdf']} | 序时账凭证: {s['total_ledger']}")
+        print(f"已匹配: {s['matched']} | 日期不一致: {s.get('date_mismatch', 0)} | "
+              f"金额不一致: {s['amount_mismatch']} | 疑似: {s.get('suspected', 0)}")
+        print(f"仅 PDF 有: {s['pdf_only']} | 账内未覆盖: {s['ledger_only']}")
+        print(f"匹配率: {s['match_rate_pct']}% | 异常: {res['anomalies']['n_anomalies']}")
+        r = res["risk"]
+        print(f"风险线索: {r['n_clues']} 条 {r['by_level']} | 风险评分 {r['risk_score']['score']}")
+        if res.get("llm_used"):
+            print("LLM 异常解释：已生成（见报告「异常清单」）")
+        print(f"报告已生成: {res['report_path']}")
+    else:
+        from agent.batch import run_batch
+        print(f"\n共 {len(pdfs)} 个凭证文件，开始批量核对…")
+        batch = run_batch(
+            pdfs, led, output_dir=out,
+            on_progress=lambda d, t, n: print(f"  [{d}/{t}] {n} 完成"))
+        s = batch["summary"]
+        print("\n===== 批量核对完成 =====")
+        print(f"文件: 成功 {s['n_files_ok']} / 失败 {s['n_files_failed']}")
+        print(f"PDF 凭证: {s['total_pdf']} | 已匹配: {s['matched']} | "
+              f"匹配率: {s['match_rate_pct']}%")
+        for f in batch["files"]:
+            if not f["ok"]:
+                print(f"  [失败] {f['file']}: {f.get('error')}")
+        print(f"报告已生成: {batch['report_path']}")
     _pause()
 
 

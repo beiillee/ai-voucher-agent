@@ -60,8 +60,8 @@ MATCH_STATUS = {
     "MATCHED": "已匹配",
     "DATE_MISMATCH": "日期不一致",
     "AMOUNT_MISMATCH": "金额不一致",
-    "SUSPECTED": "疑似匹配（多候选）",
-    "PDF_ONLY": "PDF有/序时账无",
+    "SUSPECTED": "疑似匹配",
+    "PDF_ONLY": "PDF有/账里无",
     "OCR_UNCERTAIN": "凭证号未识别",
 }
 
