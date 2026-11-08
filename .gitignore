@@ -16,8 +16,9 @@ env/
 # OCR / 解析缓存（可重新生成，体积大）
 data/ocr_cache*.json
 data/pages/
-pages/
 output/cache/
+# 注意：不要在这里写 pages/ —— Streamlit 的多页面目录就叫 pages/，
+# 忽略掉会导致页面代码无法提交。
 
 # 临时图片
 *.png
@@ -32,3 +33,7 @@ output/cache/
 # 评估 / 压测的临时中间产物（正式报告 output/evaluation/ 保留并提交）
 output/_eval/
 output/_perf*/
+
+# 网页上传与运行产物
+output/web/
+output/uploads/

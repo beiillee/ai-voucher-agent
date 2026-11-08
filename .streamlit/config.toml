@@ -1,0 +1,11 @@
+# 导航由各页的 st.page_link 手工控制，关闭自动生成的侧边栏导航，
+# 否则 pages/ 目录会再生成一套英文文件名的菜单，出现两套导航。
+[client]
+showSidebarNavigation = false
+
+[theme]
+primaryColor = "#B03A2E"
+backgroundColor = "#FFFFFF"
+
+[server]
+maxUploadSize = 200

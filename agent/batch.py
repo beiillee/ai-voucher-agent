@@ -21,14 +21,22 @@ from tools.pdf_parser import parse_pdf
 from tools.voucher_extractor import extract_vouchers
 from tools.reconciliation import reconcile
 from tools.anomaly_detector import detect_anomalies
+from tools.ledger_risk_analyzer import analyze_ledger_risk
+from tools.report_generator import generate_report
 
 
 def run_batch(
     pdf_paths: list[str | Path],
     ledger_path: str | Path,
     output_dir: str | Path = "output",
+    on_progress=None,
 ) -> dict[str, Any]:
-    """批量核对主入口。返回逐文件结果 + 汇总。"""
+    """
+    批量核对主入口。
+
+    on_progress(done, total, filename) 在每个文件处理完成后回调，
+    供 UI 显示进度；不传则静默处理。
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -38,8 +46,9 @@ def run_batch(
     files: list[dict] = []
     all_pairs: list[dict] = []
     covered_ledger: set[int] = set()
+    total_files = len(pdf_paths)
 
-    for p in pdf_paths:
+    for pos, p in enumerate(pdf_paths, start=1):
         p = Path(p)
         fdir = output_dir / p.stem  # 每个文件独立的缓存目录
         fdir.mkdir(parents=True, exist_ok=True)
@@ -86,6 +95,11 @@ def run_batch(
                 "anomalies": {"anomalies": [], "n_anomalies": 0, "n_info": 0},
                 "warnings": [],
             })
+        if on_progress is not None:
+            try:
+                on_progress(pos, total_files, p.name)
+            except Exception:
+                pass  # 进度回调出错不应影响核对结果
 
     ok_files = [f for f in files if f["ok"]]
     ledger_only_n = len(ledger_vouchers) - len(covered_ledger)
@@ -107,11 +121,60 @@ def run_batch(
     summary["match_rate_pct"] = (
         round((summary["matched"] + summary["date_mismatch"] + summary["amount_mismatch"])
               / summary["total_pdf"] * 100, 1) if summary["total_pdf"] else 0.0)
+    summary["strict_match_rate_pct"] = (
+        round(summary["matched"] / summary["total_pdf"] * 100, 1)
+        if summary["total_pdf"] else 0.0)
+
+    # 未被任何文件覆盖的序时账凭证：只在这里算一次，避免按文件重复计算
+    unmatched_ledger = [
+        {
+            "ledger_index": i,
+            "voucher_no": lv.get("voucher_no"),
+            "period": lv.get("period"),
+            "doc_date": lv.get("doc_date"),
+            "debit_sum": lv.get("debit_sum"),
+            "credit_sum": lv.get("credit_sum"),
+            "accounts": lv.get("accounts"),
+            "summaries": lv.get("summaries"),
+            "source_rows": lv.get("source_rows"),
+        }
+        for i, lv in enumerate(ledger_vouchers) if i not in covered_ledger
+    ]
+
+    combined_anoms = [a for f in ok_files for a in f["anomalies"]["anomalies"]]
+    combined_anom = {
+        "anomalies": combined_anoms,
+        "n_anomalies": sum(1 for a in combined_anoms if not a.get("is_info")),
+        "n_info": sum(1 for a in combined_anoms if a.get("is_info")),
+    }
+
+    # 账簿维度的风险分析只依赖序时账，与上传几个 PDF 无关
+    risk = analyze_ledger_risk(
+        ledger_res["records"], ledger_vouchers,
+        has_date_dim=ledger_res.get("has_date_dim"))
+
+    combined_recon = {
+        "pairs": all_pairs,
+        "summary": summary,
+        "unmatched_ledger": unmatched_ledger,
+        "duplicates": {
+            "ledger": [d for f in ok_files
+                       for d in (f["reconciliation"].get("duplicates") or {}).get("ledger", [])],
+            "pdf": [d for f in ok_files
+                    for d in (f["reconciliation"].get("duplicates") or {}).get("pdf", [])],
+        },
+    }
+    report_path = generate_report(
+        output_dir / "batch_reconciliation_result.xlsx", combined_recon, combined_anom, risk)
 
     return {
         "files": files,
         "pairs": all_pairs,
         "summary": summary,
+        "reconciliation": combined_recon,
+        "anomalies": combined_anom,
+        "risk": risk,
+        "report_path": str(report_path),
         "ledger": {
             "source": ledger_res["source"],
             "sheet_name": ledger_res["sheet_name"],
