@@ -24,6 +24,8 @@ HEADER_FONT = Font(bold=True, color="FFFFFF")
 ANOMALY_FILL = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 MATCHED_FILL = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
 INFO_FILL = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
+# 疑似匹配用黄色：既不是确定命中，也不是确定异常，需人工看一眼
+SUSPECT_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
 
 # 风险线索按等级着色：高=红、中=橙、低=灰
 LEVEL_FILL = {
@@ -64,9 +66,12 @@ def _write_sheet_results(wb, pairs: list[dict]) -> None:
     ws = wb.active
     ws.title = "核对结果"
     headers = [
-        "PDF凭证号", "PDF日期", "PDF核算单位", "PDF借方合计", "PDF贷方合计(各页之和)",
+        "来源文件", "PDF凭证号", "PDF日期", "PDF核算单位", "PDF借方合计", "PDF贷方合计(各页之和)",
+        "PDF会计科目", "PDF摘要", "PDF页码",
         "序时账凭证号", "序时账期间", "序时账借方合计", "序时账贷方合计",
+        "序时账会计科目", "序时账行号",
         "借方差异", "贷方差异", "匹配状态", "匹配方式", "匹配置信度",
+        "候选数", "候选明细",
         "OCR置信度", "异常原因",
         "PDF附件数", "PDF交易对手数", "PDF交易对手(样例)",
         "序时账交易对手(样例)", "PDF发票/合同数",
@@ -78,21 +83,33 @@ def _write_sheet_results(wb, pairs: list[dict]) -> None:
         pv = p["pdf_voucher"]; lv = p.get("ledger_voucher") or {}
         cp_pdf = pv.get("counterparties") or []
         cp_led = lv.get("counterparties") or []
+        cands = p.get("candidates") or []
+        cand_text = "；".join(
+            f"{c.get('voucher_no')}({c.get('period')}, {c.get('debit_sum')})"
+            for c in cands[:3]) if cands else ""
         row = [
+            p.get("source_file"),
             pv.get("voucher_no"),
             pv.get("date"),
             pv.get("company"),
             pv.get("debit_total"),
             pv.get("credit_total_pages"),
+            "、".join(pv.get("accounts") or []),
+            "、".join((pv.get("summaries") or [])[:2]),
+            ",".join(str(x) for x in (pv.get("source_pages") or [])),
             lv.get("voucher_no"),
             lv.get("period"),
             lv.get("debit_sum"),
             lv.get("credit_sum"),
+            "、".join((lv.get("accounts") or [])[:4]),
+            ",".join(str(x) for x in (lv.get("source_rows") or [])),
             p.get("debit_diff"),
             p.get("credit_diff"),
             p.get("match_status"),
             p.get("match_method"),
             p.get("match_confidence"),
+            p.get("candidate_count") or 0,
+            cand_text,
             pv.get("ocr_confidence_avg"),
             p.get("anomaly_reason"),
             pv.get("attachment"),
@@ -106,6 +123,8 @@ def _write_sheet_results(wb, pairs: list[dict]) -> None:
         status = p.get("match_status")
         if status == "MATCHED":
             fill = MATCHED_FILL
+        elif status == "SUSPECTED":
+            fill = SUSPECT_FILL
         elif p.get("anomaly_reason") and not p.get("match_status") == "MATCHED":
             fill = ANOMALY_FILL
         else:
@@ -113,6 +132,35 @@ def _write_sheet_results(wb, pairs: list[dict]) -> None:
         if fill:
             for c in range(1, len(headers) + 1):
                 ws.cell(row=r, column=c).fill = fill
+    _autosize(ws)
+
+
+def _write_sheet_unmatched(wb, unmatched: list[dict]) -> None:
+    """
+    未被任何 PDF 凭证对应的序时账凭证明细。
+
+    旧版这里只有 summary 里的一个「LEDGER_ONLY 共 N 笔」。只有数字没有明细，
+    读者无法判断这 N 笔是「本次没扫描」还是「账里有问题」，等于不可追溯。
+    """
+    ws = wb.create_sheet("未匹配序时账")
+    headers = ["序时账凭证号", "期间", "日期", "借方合计", "贷方合计",
+               "会计科目", "摘要", "原始行号"]
+    ws.append(headers)
+    _style_header(ws, len(headers))
+    for u in unmatched:
+        ws.append([
+            u.get("voucher_no"),
+            u.get("period"),
+            u.get("doc_date"),
+            u.get("debit_sum"),
+            u.get("credit_sum"),
+            "、".join((u.get("accounts") or [])[:4]),
+            "、".join((u.get("summaries") or [])[:3]),
+            ",".join(str(x) for x in (u.get("source_rows") or [])),
+        ])
+        r = ws.max_row
+        for c in range(1, len(headers) + 1):
+            ws.cell(row=r, column=c).fill = INFO_FILL
     _autosize(ws)
 
 
@@ -148,12 +196,18 @@ def _write_sheet_summary(wb, summary: dict, anomaly_summary: dict,
         ("生成时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ""),
         ("PDF 凭证数", summary.get("total_pdf", 0), "PDF 扫描件覆盖的凭证数"),
         ("序时账凭证数", summary.get("total_ledger", 0), "Excel 序时账凭证总数"),
-        ("成功匹配", summary.get("matched", 0), "借/贷金额完全一致"),
+        ("成功匹配", summary.get("matched", 0), "借/贷金额完全一致且凭证号期间一致"),
+        ("日期不一致", summary.get("date_mismatch", 0), "凭证可对应但期间不同"),
         ("金额不一致", summary.get("amount_mismatch", 0), ""),
+        ("疑似匹配（多候选）", summary.get("suspected", 0),
+         "存在多个同样合理的候选，未下确定性结论，需人工确认"),
         ("PDF_ONLY（PDF有/序时账无）", summary.get("pdf_only", 0), ""),
         ("OCR 不确定", summary.get("ocr_uncertain", 0), ""),
-        ("LEDGER_ONLY（序时账有/PDF无）", summary.get("ledger_only", 0), "信息性：PDF 未覆盖范围"),
-        ("匹配率", f"{summary.get('match_rate_pct', 0)}%", "matched / total_pdf"),
+        ("LEDGER_ONLY（序时账有/PDF无）", summary.get("ledger_only", 0),
+         "信息性：PDF 未覆盖范围，明细见「未匹配序时账」"),
+        ("匹配率", f"{summary.get('match_rate_pct', 0)}%", "（匹配+日期不符+金额不符）/ PDF 凭证数"),
+        ("严格匹配率", f"{summary.get('strict_match_rate_pct', summary.get('match_rate_pct', 0))}%",
+         "金额与期间全部一致 / PDF 凭证数"),
         ("异常总数（非信息性）", anomaly_summary.get("n_anomalies", 0), ""),
         ("信息性条目", anomaly_summary.get("n_info", 0), ""),
     ]
@@ -271,6 +325,7 @@ def generate_report(
     wb = openpyxl.Workbook()
     _write_sheet_results(wb, reconciliation_result.get("pairs", []))
     _write_sheet_anomalies(wb, anomaly_result.get("anomalies", []))
+    _write_sheet_unmatched(wb, reconciliation_result.get("unmatched_ledger", []))
     if risk_result is not None:
         _write_sheet_risk_clues(wb, risk_result.get("clues", []))
         _write_sheet_risk_overview(wb, risk_result)

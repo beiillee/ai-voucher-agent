@@ -6,7 +6,7 @@
 
 1) 原样例（data/sample_voucher.pdf + sample_ledger.xlsx）
    —— 2 页凭证、8 行序时账。用于验证不依赖 Tesseract 的最短链路，
-      以及报告的 5 个 Sheet 结构。
+      以及报告的 6 个 Sheet 结构。
 
 2) 账证核对演示集（data/demo_recon/）
    —— 8 张账内凭证 + 7 张 PDF 凭证（含 1 张两页），覆盖
@@ -34,7 +34,7 @@ DEMO_PDF = ROOT / "data" / "demo_recon" / "vouchers.pdf"
 DEMO_XLSX = ROOT / "data" / "demo_recon" / "ledger.xlsx"
 DEMO_LABELS = ROOT / "data" / "demo_recon" / "labels.json"
 
-EXPECTED_SHEETS = ["核对结果", "异常清单", "风险线索", "风险概览", "统计汇总"]
+EXPECTED_SHEETS = ["核对结果", "异常清单", "未匹配序时账", "风险线索", "风险概览", "统计汇总"]
 
 RISK_CLUE_COLUMNS = ["等级", "类型", "线索", "科目", "期间", "凭证号", "金额",
                      "比较组（样本数）", "基线", "偏离度", "检测方法", "判断依据",
@@ -69,7 +69,7 @@ class TestIntegration(unittest.TestCase):
                 self.assertAlmostEqual(p["credit_diff"], 0.0, 2)
                 self.assertEqual(p["match_method"], "P1_完整key")
 
-    def test_report_file_created_with_five_sheets(self):
+    def test_report_file_created_with_six_sheets(self):
         rp = Path(self.res["report_path"])
         self.assertTrue(rp.exists())
         wb = openpyxl.load_workbook(rp)
@@ -159,7 +159,7 @@ class TestDemoReconIntegration(unittest.TestCase):
         self.assertListEqual(pair["pdf_voucher"]["source_pages"], [2, 3])
         self.assertAlmostEqual(pair["pdf_voucher"]["debit_total"], 1_240_000.00, 2)
 
-    def test_report_five_sheets_with_risk_clue(self):
+    def test_report_six_sheets_with_risk_clue(self):
         """演示集里 0007/0707 同额同摘要，应产出至少一条风险线索。"""
         rp = Path(self.res["report_path"])
         wb = openpyxl.load_workbook(rp)

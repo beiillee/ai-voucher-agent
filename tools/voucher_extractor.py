@@ -39,6 +39,40 @@ RE_CP_SUFFIX = re.compile(r"(公司|厂|局|部|集团|股份)")
 RE_INVOICE = re.compile(r"发\s*票[号码：: ]*([\w\-]{4,})")
 RE_CONTRACT = re.compile(r"合\s*同[号码编号：: ]*([\w\-]{4,})")
 
+# ---- 会计科目识别 ----
+# 凭证正文每行形如：  摘要|交易对手  会计科目  金额
+# 科目取自「金额之前的最后一个中文词」，再用科目词表校验，避免把公司名当科目。
+RE_LINE_WITH_AMOUNT = re.compile(
+    r"^(?P<body>.+?)\s+(?P<amount>\d{1,3}(?:[,\s]+\d{3})*\.\s*\d{1,2})\s*$"
+)
+# 常见科目词表（按长度降序匹配，长的优先，避免「管理费用」被切成「费用」）
+ACCOUNT_VOCAB = [
+    "主营业务收入", "主营业务成本", "其他业务收入", "其他业务成本",
+    "税金及附加", "销售费用", "管理费用", "财务费用", "制造费用", "研发费用",
+    "营业外收入", "营业外支出", "所得税费用", "资产减值损失", "信用减值损失",
+    "库存现金", "银行存款", "其他货币资金", "应收账款", "应付账款",
+    "预收账款", "预付账款", "其他应收款", "其他应付款", "应收票据", "应付票据",
+    "原材料", "库存商品", "周转材料", "在产品", "半成品", "委托加工物资",
+    "固定资产", "累计折旧", "在建工程", "无形资产", "累计摊销", "长期待摊费用",
+    "短期借款", "长期借款", "应付职工薪酬", "应交税费", "实收资本", "资本公积",
+    "盈余公积", "本年利润", "利润分配", "生产成本", "劳务成本", "合同负债",
+    "合同资产", "使用权资产", "租赁负债", "递延收益", "待摊费用", "预提费用",
+    "业务招待费", "差旅费", "办公费", "职工薪酬", "折旧费", "摊销费",
+    "运输费", "仓储费", "广告费", "咨询服务费", "技术服务费", "水电费",
+    "咨询费", "服务费", "劳务费", "会议费", "培训费", "租赁费", "保险费",
+    "修理费", "低值易耗品", "包装物", "销售费用-业务招待费",
+]
+# 兜底：以这些词结尾的中文串也认作科目（覆盖企业自定义明细科目）
+ACCOUNT_SUFFIX = ("费", "成本", "收入", "支出", "损失", "账款", "存款", "现金",
+                  "税金", "资产", "负债", "权益", "利润", "准备", "物资", "商品",
+                  "材料", "票据", "薪酬", "工程", "摊销", "折旧", "基金")
+# 不是科目的常见误命中
+ACCOUNT_STOP = {"合计", "小计", "金额", "借方", "贷方", "摘要", "科目", "会计科目",
+                "记账凭证", "核算单位", "制单", "审核", "记账", "附件"}
+
+# 摘要中的业务动词，用于判断一行是不是分录行
+RE_LINE_NOISE = re.compile(r"合\s*计|Total|记账凭证|核算单位|摘\s*要|会计科目", re.IGNORECASE)
+
 # 交易对手名清洗：去空格，过滤纯数字/过短噪声
 def _norm_counterparty(s: str) -> str:
     s = re.sub(r"\s", "", s or "")
@@ -57,12 +91,90 @@ def _clean_amount(s: str) -> float | None:
         return None
 
 
+def _find_account(text: str) -> str | None:
+    """
+    从一段文本里找会计科目。
+
+    先用词表做最长匹配（词表里的标准科目最可信）；词表没命中时，
+    退化为「以科目后缀结尾的连续中文串」，但仍要排除合计/金额这类表头词。
+    找不到就返回 None，不猜。
+    """
+    if not text:
+        return None
+    t = re.sub(r"\s", "", text)
+    if not t or t in ACCOUNT_STOP:
+        return None
+    # 0) 去掉公司名及其前缀：行内常是「供应商全称 + 科目」，
+    #    不剥离的话会把「XX有限公司咨询费」整串当科目。
+    m_co = re.search(r"(?:有限公司|股份公司|集团|公司|厂|局|部)", t)
+    body = t[m_co.end():] if (m_co and m_co.end() < len(t)) else t
+    if not body:
+        body = t
+    # 1) 词表最长匹配（先在剥离后的正文上找，找不到再退回整串）
+    vocab_sorted = sorted(ACCOUNT_VOCAB, key=len, reverse=True)
+    for vocab in vocab_sorted:
+        if vocab in body:
+            return vocab
+    for vocab in vocab_sorted:
+        if vocab in t:
+            return vocab
+    # 2) 后缀兜底：取末尾的连续中文（含括号），长度 2-12
+    m = re.search(r"([一-龥（）()]{2,12})$", body)
+    if m:
+        cand = m.group(1)
+        if cand not in ACCOUNT_STOP and cand.endswith(ACCOUNT_SUFFIX) and len(cand) >= 3:
+            return cand
+    return None
+
+
+def _extract_line_items(text: str) -> list[dict]:
+    """
+    抽取凭证正文的分录行：{summary, account, amount, raw_line}。
+
+    凭证行的一般形态是「摘要|交易对手  科目  金额」，科目在金额左侧。
+    只处理能明确切出行首摘要与行尾金额的行，其余一律跳过，宁可少抽也不错抽。
+    """
+    items: list[dict] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or RE_LINE_NOISE.search(line):
+            continue
+        m = RE_LINE_WITH_AMOUNT.match(line)
+        if not m:
+            continue
+        body = m.group("body").strip()
+        amount = _clean_amount(m.group("amount"))
+        if amount is None:
+            continue
+        # 摘要：竖线之前的部分；没有竖线时取行首 2-20 字
+        summary = None
+        head = body
+        if "|" in body or "｜" in body:
+            parts = re.split(r"[|｜]", body, maxsplit=1)
+            summary = parts[0].strip()
+            head = parts[1].strip()
+        else:
+            mm = re.match(r"^([一-龥]{2,20})", body)
+            summary = mm.group(1) if mm else None
+        account = _find_account(head)
+        if not account:
+            continue
+        items.append({
+            "summary": summary,
+            "account": account,
+            "amount": amount,
+            "raw_line": line,
+        })
+    return items
+
+
 def _extract_page_fields(text: str) -> dict[str, Any]:
     """从单页 OCR 文本里提取字段（粗提取，不做跨页合并）。"""
     fields: dict[str, Any] = {
         "voucher_no": None, "date": None, "company": None,
         "page_x_of_n": None, "amounts_all": [],
         "debit_total": None, "credit_total": None, "line_amounts": [],
+        "line_items": [], "accounts": [], "summaries": [],
         "attachment": None, "counterparties": [], "invoices": [], "contracts": [],
     }
     m = RE_VOUCHER_NO.search(text)
@@ -129,6 +241,13 @@ def _extract_page_fields(text: str) -> dict[str, Any]:
             fields["line_amounts"] = [a for a in amts if a != debit]
     else:
         fields["line_amounts"] = amts
+
+    # 分录行（摘要 + 会计科目 + 金额）：匹配与风险分析都要用到科目口径
+    fields["line_items"] = _extract_line_items(text)
+    fields["accounts"] = list(dict.fromkeys(
+        it["account"] for it in fields["line_items"] if it.get("account")))
+    fields["summaries"] = list(dict.fromkeys(
+        it["summary"] for it in fields["line_items"] if it.get("summary")))
 
     return fields
 
@@ -225,9 +344,22 @@ def extract_vouchers(pdf_parse_result: dict) -> list[dict[str, Any]]:
         invoices = list({iv for it in items for iv in (it.get("invoices") or [])})
         contracts = list({ct for it in items for ct in (it.get("contracts") or [])})
 
+        # 分录行 / 科目 / 摘要（跨页合并，保持出现顺序）
+        line_items_all: list[dict] = [li for it in items for li in (it.get("line_items") or [])]
+        accounts_all = list(dict.fromkeys(
+            a for it in items for a in (it.get("accounts") or [])))
+        summaries_all = list(dict.fromkeys(
+            s for it in items for s in (it.get("summaries") or [])))
+        # 主科目：金额最大的一行所属科目，供风险分析按科目归类
+        primary_account = None
+        if line_items_all:
+            primary = max(line_items_all, key=lambda x: x.get("amount") or 0)
+            primary_account = primary.get("account")
+
         confs = [it["ocr_confidence"] for it in items if it["ocr_confidence"] is not None]
         ocr_conf_avg = round(sum(confs) / len(confs), 1) if confs else None
 
+        # 抽取完整度分母固定为 4（编号/日期/单位/借方合计），加科目不摊薄原有口径
         fields_present = sum(1 for x in [vno, main_date, main_company, debit_total] if x)
         extraction_conf = round(fields_present / 4.0, 2)
 
@@ -236,6 +368,7 @@ def extract_vouchers(pdf_parse_result: dict) -> list[dict[str, Any]]:
         if not main_date: unparsed.append("date")
         if not main_company: unparsed.append("company")
         if debit_total is None: unparsed.append("debit_total")
+        if not accounts_all: unparsed.append("accounts")
 
         vouchers.append({
             "voucher_no_raw": vno,
@@ -248,8 +381,15 @@ def extract_vouchers(pdf_parse_result: dict) -> list[dict[str, Any]]:
             "total_pages": page_count_total,
             "debit_total": debit_total,
             "credit_total_pages": credit_total_sum,
+            "debit_sum": debit_total,          # 与序时账统一命名
+            "credit_sum": credit_total_sum,
             "line_amounts": line_amounts_union,
+            "line_items": line_items_all,
+            "accounts": accounts_all,
+            "summaries": summaries_all,
+            "primary_account": primary_account,
             "line_count_pdf": sum(len(it.get("line_amounts") or []) for it in items),
+            "line_count": len(line_items_all),
             "ocr_confidence_avg": ocr_conf_avg,
             "extraction_confidence": extraction_conf,
             "attachment": attachment,

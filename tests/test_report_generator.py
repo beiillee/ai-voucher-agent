@@ -47,6 +47,16 @@ RECON = {
          "anomaly_reason": "未在序时账中找到对应凭证"},
     ],
     "summary": SUMMARY,
+    # 未匹配序时账明细：只给计数不给明细的话，读者无法判断是「没扫描」还是「账里少了」
+    "unmatched_ledger": [
+        {"voucher_no": "(记)-2023-10-1200", "period": "2023-10",
+         "doc_date": None, "debit_sum": 50.0, "credit_sum": 50.0,
+         "accounts": ["银行存款", "应收账款"],
+         "summaries": ["收款"], "source_rows": [2, 3]},
+        {"voucher_no": "(记)-2023-10-1300", "period": "2023-10",
+         "doc_date": None, "debit_sum": 60.0, "credit_sum": 60.0,
+         "accounts": ["管理费用"], "summaries": ["报销"], "source_rows": [4]},
+    ],
 }
 ANOM = {
     "anomalies": [
@@ -94,16 +104,28 @@ RISK = {
 
 
 class TestReportGeneratorWithoutRisk(unittest.TestCase):
-    """不传风险结果时，只出 3 个 Sheet（保持原有行为）。"""
+    """不传风险结果时，出 4 个 Sheet（核对结果 / 异常清单 / 未匹配序时账 / 统计汇总）。"""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.path = os.path.join(self.tmp, "out.xlsx")
         generate_report(self.path, RECON, ANOM)
 
-    def test_three_sheets(self):
+    def test_four_sheets(self):
         wb = openpyxl.load_workbook(self.path)
-        self.assertListEqual(wb.sheetnames, ["核对结果", "异常清单", "统计汇总"])
+        self.assertListEqual(
+            wb.sheetnames, ["核对结果", "异常清单", "未匹配序时账", "统计汇总"])
+
+    def test_unmatched_sheet_has_detail_rows(self):
+        """未匹配序时账必须是明细，不能只有一个计数。"""
+        ws = openpyxl.load_workbook(self.path)["未匹配序时账"]
+        self.assertEqual(ws.max_row, 3)          # 表头 + 2 条明细
+        headers = [c.value for c in ws[1]]
+        self.assertIn("原始行号", headers)
+        row_no_col = headers.index("原始行号") + 1
+        self.assertEqual(ws.cell(row=2, column=row_no_col).value, "2,3")
+        vno_col = headers.index("序时账凭证号") + 1
+        self.assertEqual(ws.cell(row=2, column=vno_col).value, "(记)-2023-10-1200")
 
     def test_results_content(self):
         ws = openpyxl.load_workbook(self.path)["核对结果"]
@@ -124,17 +146,18 @@ class TestReportGeneratorWithoutRisk(unittest.TestCase):
 
 
 class TestReportGeneratorWithRisk(unittest.TestCase):
-    """传入风险结果时，应输出 5 个 Sheet，且风险两张表内容完整。"""
+    """传入风险结果时，应输出 6 个 Sheet，且风险两张表内容完整。"""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.path = os.path.join(self.tmp, "out.xlsx")
         generate_report(self.path, RECON, ANOM, RISK)
 
-    def test_five_sheets(self):
+    def test_six_sheets(self):
         wb = openpyxl.load_workbook(self.path)
         self.assertListEqual(
-            wb.sheetnames, ["核对结果", "异常清单", "风险线索", "风险概览", "统计汇总"])
+            wb.sheetnames,
+            ["核对结果", "异常清单", "未匹配序时账", "风险线索", "风险概览", "统计汇总"])
 
     def test_risk_clue_headers(self):
         ws = openpyxl.load_workbook(self.path)["风险线索"]

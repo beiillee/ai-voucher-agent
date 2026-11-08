@@ -172,7 +172,7 @@ def analyze_excel(path: str | Path) -> dict:
     std_to_raw = {v: k for k, v in mapping.items()}
 
     records: list[dict] = []
-    for _, row in data.iterrows():
+    for i, (_, row) in enumerate(data.iterrows()):
         rec: dict[str, Any] = {}
         for std in STANDARD_FIELDS:
             raw_col = std_to_raw.get(std)
@@ -190,6 +190,8 @@ def analyze_excel(path: str | Path) -> dict:
         # 有日期无期间时，用日期回填期间（YYYY-MM），便于按期间聚合
         if not rec.get("period") and rec.get("doc_date"):
             rec["period"] = rec["doc_date"].strftime("%Y-%m")
+        # Excel 物理行号（1 起，含表头行）：报告要能指回原表第几行
+        rec["source_row"] = header_row + i + 2
         records.append(rec)
 
     # 按凭证号聚合
@@ -253,6 +255,8 @@ def _aggregate_vouchers(records: list[dict]) -> list[dict]:
             "status": r0.get("status"),
             "maker": r0.get("maker"),
             "checker": r0.get("checker"),
+            # 凭证在原始 Excel 里占用的物理行号，供报告回溯
+            "source_rows": [r.get("source_row") for r in rows if r.get("source_row")],
         })
     return vouchers
 
