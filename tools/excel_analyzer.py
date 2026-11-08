@@ -23,8 +23,10 @@ from typing import Any
 import pandas as pd
 
 # ---- 标准字段（项目内部统一 schema）----
+# doc_date 为可选字段：真实序时账常见「记账日期/凭证日期」，也可能只有月度期间。
+# 有时间维度才能做期末集中入账、周末入账等分析；没有则降级为月度分析。
 STANDARD_FIELDS = [
-    "period", "voucher_type", "voucher_no", "line_no", "summary",
+    "period", "doc_date", "voucher_type", "voucher_no", "line_no", "summary",
     "account", "debit", "credit", "cash_flow", "status",
     "maker", "checker", "booker", "counterparty",
 ]
@@ -34,6 +36,7 @@ COLUMN_KEYWORDS = {
     "voucher_no": ["凭证编号", "凭证字号", "凭证号", "字号"],
     "voucher_type": ["凭证类型", "凭证种类"],
     "period": ["记账期间", "会计期间", "期间"],
+    "doc_date": ["记账日期", "凭证日期", "业务日期", "单据日期", "制单日期", "日期"],
     "line_no": ["行号", "序号", "分录号"],
     "summary": ["摘要", "业务摘要", "内容"],
     "account": ["会计科目", "科目名称", "科目"],
@@ -116,6 +119,24 @@ def build_column_mapping(columns) -> dict[str, str]:
     return assigned
 
 
+def _parse_date(x: Any):
+    """把各种日期写法解析为 datetime.date；无法解析返回 None。"""
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return None
+    if hasattr(x, "date") and not isinstance(x, str):
+        try:
+            return x.date()
+        except Exception:
+            pass
+    s = str(x).strip()
+    if not s or s in ("-", "—", "None", "nan", "NaT"):
+        return None
+    # 中文日期写法归一：2023年10月12日 -> 2023-10-12
+    s = re.sub(r"[年/.]", "-", s).replace("月", "-").replace("日", "").strip("-")
+    ts = pd.to_datetime(s, errors="coerce", format="mixed")
+    return None if pd.isna(ts) else ts.date()
+
+
 def analyze_excel(path: str | Path) -> dict:
     """
     主入口：分析序时账 Excel。
@@ -158,16 +179,22 @@ def analyze_excel(path: str | Path) -> dict:
             val = row.get(raw_col) if raw_col is not None else None
             if std in ("debit", "credit"):
                 val = _clean_number(val)
+            elif std == "doc_date":
+                val = _parse_date(val)
             else:
                 val = None if (val is None or (isinstance(val, float) and pd.isna(val))) else str(val).strip()
             rec[std] = val
         # 跳过全空行
         if all(rec.get(f) in (None, "") for f in STANDARD_FIELDS):
             continue
+        # 有日期无期间时，用日期回填期间（YYYY-MM），便于按期间聚合
+        if not rec.get("period") and rec.get("doc_date"):
+            rec["period"] = rec["doc_date"].strftime("%Y-%m")
         records.append(rec)
 
     # 按凭证号聚合
     vouchers = _aggregate_vouchers(records)
+    n_dated = sum(1 for r in records if r.get("doc_date"))
 
     return {
         "source": path,
@@ -178,6 +205,8 @@ def analyze_excel(path: str | Path) -> dict:
         "column_mapping": mapping,
         "records": records,
         "vouchers": vouchers,
+        "n_dated_rows": n_dated,
+        "has_date_dim": n_dated > 0,
         "warnings": warnings,
     }
 
@@ -212,6 +241,7 @@ def _aggregate_vouchers(records: list[dict]) -> list[dict]:
         vouchers.append({
             "voucher_no": vno if vno != "__NO_VNO__" else None,
             "period": r0.get("period"),
+            "doc_date": r0.get("doc_date"),
             "voucher_type": r0.get("voucher_type"),
             "line_count": len(rows),
             "debit_sum": round(debit_sum, 2),

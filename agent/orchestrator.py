@@ -29,6 +29,7 @@ from tools.excel_analyzer import analyze_excel
 from tools.voucher_extractor import extract_vouchers
 from tools.reconciliation import reconcile
 from tools.anomaly_detector import detect_anomalies
+from tools.ledger_risk_analyzer import analyze_ledger_risk
 from tools.report_generator import generate_report
 
 from .prompts import SYSTEM_PROMPT, ANOMALY_EXPLAIN_USER_TEMPLATE
@@ -98,12 +99,18 @@ def run(
     ledger_vouchers = ledger_res["vouchers"]
     # 4) 匹配
     recon = reconcile(pdf_vouchers, ledger_vouchers)
-    # 5) 异常
+    # 5) 异常（账证维度：PDF 与序时账对不上）
     anom = detect_anomalies(pdf_vouchers, ledger_vouchers, recon)
-    # 6) 报告
-    report_path = generate_report(output_dir / "voucher_reconciliation_result.xlsx", recon, anom)
+    # 6) 风险分析（账簿维度：不看 PDF，只审视序时账本身）
+    risk = analyze_ledger_risk(
+        ledger_res["records"], ledger_vouchers, has_date_dim=ledger_res.get("has_date_dim")
+    )
+    # 7) 报告
+    report_path = generate_report(
+        output_dir / "voucher_reconciliation_result.xlsx", recon, anom, risk
+    )
 
-    # 7) LLM（可选）
+    # 8) LLM（可选）
     llm_explanations: dict[int, str] = {}
     llm_used = False
     if use_llm and os.getenv("OPENAI_API_KEY"):
@@ -124,11 +131,13 @@ def run(
             "raw_columns": ledger_res["raw_columns"],
             "column_mapping": ledger_res["column_mapping"],
             "n_vouchers": len(ledger_vouchers),
+            "has_date_dim": ledger_res.get("has_date_dim", False),
             "warnings": ledger_res["warnings"],
         },
         "pdf_vouchers": pdf_vouchers,
         "reconciliation": recon,
         "anomalies": anom,
+        "risk": risk,
         "report_path": str(report_path),
         "llm_used": llm_used,
         "llm_explanations": llm_explanations,
@@ -149,4 +158,6 @@ if __name__ == "__main__":
     print(f"LEDGER_ONLY(信息性): {s['ledger_only']} | OCR 不确定: {s['ocr_uncertain']}")
     print(f"匹配率: {s['match_rate_pct']}%")
     print(f"异常: {res['anomalies']['n_anomalies']} | 信息性: {res['anomalies']['n_info']}")
+    r = res["risk"]
+    print(f"序时账风险线索: {r['n_clues']} 条 {r['by_level']}")
     print(f"报告: {res['report_path']}")

@@ -158,8 +158,11 @@ def extract_vouchers(pdf_parse_result: dict) -> list[dict[str, Any]]:
     # 主凭证号（众数）
     vno_counter = Counter(f["voucher_no"] for f in per_page if f["voucher_no"])
     main_vno = vno_counter.most_common(1)[0][0] if vno_counter else None
-    main_date = _most_common([f["date"] for f in per_page if f["date"]])
-    main_company = _most_common([f["company"] for f in per_page if f["company"]])
+    # 全局日期/单位仅作兜底：只有当某张凭证的所有页都抽不到日期(或单位)时才用它。
+    # 不能用全文件众数直接填每张凭证 —— 多张凭证的 PDF 会全部串成同一天，
+    # 进而使 period 错误、匹配降级为「仅编号」并产生假的日期不一致。
+    global_date = _most_common([f["date"] for f in per_page if f["date"]])
+    global_company = _most_common([f["company"] for f in per_page if f["company"]])
 
     # 分组：key = (vno if vno else main_vno)
     groups: dict[str, list[dict]] = {}
@@ -174,6 +177,9 @@ def extract_vouchers(pdf_parse_result: dict) -> list[dict[str, Any]]:
     for key in order:
         items = groups[key]
         vno = key if key != "__unknown__" else None
+        # 日期/单位按「本凭证所辖的页」取众数；全抽不到时退回全局众数
+        main_date = _most_common([it["date"] for it in items if it.get("date")]) or global_date
+        main_company = _most_common([it["company"] for it in items if it.get("company")]) or global_company
         # 借方合计(凭证总额)：综合两类信号取众数，稳健应对 OCR 噪声：
         #   - 各页「合计」行的借方(=本页总额)：清晰/文字层 PDF 可靠
         #   - 全局 ≥ 百万 金额：扫描件 OCR 下「合计」行漏检时的退路
