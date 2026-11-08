@@ -5,7 +5,7 @@
 > 定位：财务资料核查的**辅助工具**。输出的是待核查线索，不是审计结论；
 > 金额是否一致由精确比较决定，模型只在配置了 Key 时负责把结论写成中文说明。
 
-> 🔗 **在线演示**：<https://a91a5ee45b373f309.app.workbuddy.link>
+> 🔗 **在线演示**：<https://ai-voucher-agent-pwanzsbu8xylpujwimfunp.streamlit.app/>
 > （免装环境，上传 PDF + Excel 即可体验）
 
 ---
