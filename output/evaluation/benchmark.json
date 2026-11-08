@@ -1,0 +1,53 @@
+{
+  "file_scaling": [
+    {
+      "n_files": 1,
+      "seconds_median": 0.395,
+      "seconds_per_file": 0.395,
+      "peak_mb": 15.1,
+      "pdf_vouchers": 7,
+      "failed": 0
+    },
+    {
+      "n_files": 2,
+      "seconds_median": 0.485,
+      "seconds_per_file": 0.242,
+      "peak_mb": 7.2,
+      "pdf_vouchers": 14,
+      "failed": 0
+    },
+    {
+      "n_files": 4,
+      "seconds_median": 0.907,
+      "seconds_per_file": 0.227,
+      "peak_mb": 14.8,
+      "pdf_vouchers": 28,
+      "failed": 0
+    },
+    {
+      "n_files": 8,
+      "seconds_median": 1.789,
+      "seconds_per_file": 0.224,
+      "peak_mb": 21.7,
+      "pdf_vouchers": 56,
+      "failed": 0
+    }
+  ],
+  "ledger_scaling": [
+    {
+      "ledger": "16 行（演示小账）",
+      "n_ledger_vouchers": 8,
+      "seconds_median": 0.459,
+      "per_1000_vouchers": 57.312,
+      "peak_mb": 4.3
+    },
+    {
+      "ledger": "1070 行（演示大账）",
+      "n_ledger_vouchers": 535,
+      "seconds_median": 1.519,
+      "per_1000_vouchers": 2.839,
+      "peak_mb": 8.3
+    }
+  ],
+  "note": "演示 PDF 含文字层，不触发 OCR；扫描件耗时按页数线性增加，本表不含 OCR 时间。沙箱环境无 GPU。"
+}
