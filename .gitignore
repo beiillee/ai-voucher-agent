@@ -28,3 +28,7 @@ output/cache/
 .idea/
 .vscode/
 .DS_Store
+
+# 评估 / 压测的临时中间产物（正式报告 output/evaluation/ 保留并提交）
+output/_eval/
+output/_perf*/

@@ -82,15 +82,105 @@
   "known_gaps": [
     {
       "case": "同号重复凭证（DUPLICATE_LEDGER / DUPLICATE_VOUCHER）",
-      "status": "当前实现不可达",
+      "status": "已修复（阶段1）",
       "reason": "excel_analyzer._aggregate_vouchers 与 voucher_extractor.extract_vouchers 都按凭证号分组，同号记录在聚合阶段已被合并为一张凭证，因此 anomaly_detector 里基于 Counter 的重复检测永远得到计数 1。",
-      "suggested_fix": "P3 阶段在 records 层（聚合前）扫描重复凭证号，或在聚合时保留重复组标记。"
+      "suggested_fix": "P3 阶段在 records 层（聚合前）扫描重复凭证号，或在聚合时保留重复组标记。",
+      "fix_note": "reconciliation._build_ledger_index 的 by_key 改为挂列表，同号凭证全部保留；reconcile 在 records 层按凭证号扫描重复组，输出 duplicates.ledger / duplicates.pdf。"
     },
     {
       "case": "reconciliation.summary 缺 DATE_MISMATCH 计数",
-      "status": "字段缺失",
+      "status": "已修复（阶段1）",
       "reason": "summary 只统计 matched / amount_mismatch / pdf_only / ocr_uncertain，日期不一致只能从 pairs 或 anomalies 反查。",
-      "suggested_fix": "P2 阶段在 summary 中补 date_mismatch 字段。"
+      "suggested_fix": "P2 阶段在 summary 中补 date_mismatch 字段。",
+      "fix_note": "summary 增加 date_mismatch / suspected / strict_match_rate_pct。"
+    }
+  ],
+  "expected_pairs": {
+    "0001": {
+      "ledger_voucher_no": "(记)-2025-01-0001",
+      "status": "MATCHED"
+    },
+    "0002": {
+      "ledger_voucher_no": "(记)-2025-01-0002",
+      "status": "MATCHED"
+    },
+    "0003": {
+      "ledger_voucher_no": "(记)-2025-02-0003",
+      "status": "AMOUNT_MISMATCH"
+    },
+    "0004": {
+      "ledger_voucher_no": "(记)-2025-02-0004",
+      "status": "DATE_MISMATCH"
+    },
+    "0007": {
+      "ledger_voucher_no": "(记)-2025-03-0007",
+      "status": "MATCHED"
+    },
+    "0009": {
+      "ledger_voucher_no": "(记)-2025-04-0009",
+      "status": "MATCHED"
+    },
+    "0012": {
+      "ledger_voucher_no": null,
+      "status": "PDF_ONLY"
+    }
+  },
+  "expected_fields": {
+    "0001": {
+      "voucher_no": "0001",
+      "date": "2025-01-06",
+      "debit_total": 528551.91,
+      "account": "原材料"
+    },
+    "0002": {
+      "voucher_no": "0002",
+      "date": "2025-01-15",
+      "debit_total": 1240000.0,
+      "account": "应收账款"
+    },
+    "0003": {
+      "voucher_no": "0003",
+      "date": "2025-02-10",
+      "debit_total": 320300.77,
+      "account": "咨询费"
+    },
+    "0004": {
+      "voucher_no": "0004",
+      "date": "2025-03-03",
+      "debit_total": 95000.0,
+      "account": "运输费"
+    },
+    "0007": {
+      "voucher_no": "0007",
+      "date": "2025-03-12",
+      "debit_total": 23800.0,
+      "account": "业务招待费"
+    },
+    "0009": {
+      "voucher_no": "0009",
+      "date": "2025-04-08",
+      "debit_total": 8640.0,
+      "account": "差旅费"
+    },
+    "0012": {
+      "voucher_no": "0012",
+      "date": "2025-04-22",
+      "debit_total": 777777.77,
+      "account": "原材料"
+    }
+  },
+  "expected_anomalies": [
+    {
+      "voucher_no": "0003",
+      "type": "AMOUNT_MISMATCH"
+    },
+    {
+      "voucher_no": "0004",
+      "type": "DATE_MISMATCH"
+    },
+    {
+      "voucher_no": "0012",
+      "type": "PDF_ONLY"
     }
   ]
 }

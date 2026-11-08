@@ -1,0 +1,350 @@
+{
+  "generated_at": "2026-11-08 17:06:30",
+  "dataset": {
+    "name": "data/demo_recon",
+    "n_pdf_vouchers": 7,
+    "n_ledger_vouchers": 8,
+    "labels_file": "data/demo_recon/labels.json"
+  },
+  "fields": {
+    "total": 28,
+    "correct": 28,
+    "accuracy": 1.0,
+    "by_field": {
+      "voucher_no": {
+        "n": 7,
+        "ok": 7,
+        "accuracy": 1.0
+      },
+      "date": {
+        "n": 7,
+        "ok": 7,
+        "accuracy": 1.0
+      },
+      "debit_total": {
+        "n": 7,
+        "ok": 7,
+        "accuracy": 1.0
+      },
+      "account": {
+        "n": 7,
+        "ok": 7,
+        "accuracy": 1.0
+      }
+    },
+    "details": [
+      {
+        "voucher_no": "0001",
+        "field": "voucher_no",
+        "expected": "0001",
+        "actual": "0001",
+        "ok": true
+      },
+      {
+        "voucher_no": "0001",
+        "field": "date",
+        "expected": "2025-01-06",
+        "actual": "2025-01-06",
+        "ok": true
+      },
+      {
+        "voucher_no": "0001",
+        "field": "debit_total",
+        "expected": 528551.91,
+        "actual": 528551.91,
+        "ok": true
+      },
+      {
+        "voucher_no": "0001",
+        "field": "account",
+        "expected": "原材料",
+        "actual": "原材料",
+        "ok": true
+      },
+      {
+        "voucher_no": "0002",
+        "field": "voucher_no",
+        "expected": "0002",
+        "actual": "0002",
+        "ok": true
+      },
+      {
+        "voucher_no": "0002",
+        "field": "date",
+        "expected": "2025-01-15",
+        "actual": "2025-01-15",
+        "ok": true
+      },
+      {
+        "voucher_no": "0002",
+        "field": "debit_total",
+        "expected": 1240000.0,
+        "actual": 1240000.0,
+        "ok": true
+      },
+      {
+        "voucher_no": "0002",
+        "field": "account",
+        "expected": "应收账款",
+        "actual": "应收账款",
+        "ok": true
+      },
+      {
+        "voucher_no": "0003",
+        "field": "voucher_no",
+        "expected": "0003",
+        "actual": "0003",
+        "ok": true
+      },
+      {
+        "voucher_no": "0003",
+        "field": "date",
+        "expected": "2025-02-10",
+        "actual": "2025-02-10",
+        "ok": true
+      },
+      {
+        "voucher_no": "0003",
+        "field": "debit_total",
+        "expected": 320300.77,
+        "actual": 320300.77,
+        "ok": true
+      },
+      {
+        "voucher_no": "0003",
+        "field": "account",
+        "expected": "咨询费",
+        "actual": "咨询费",
+        "ok": true
+      },
+      {
+        "voucher_no": "0004",
+        "field": "voucher_no",
+        "expected": "0004",
+        "actual": "0004",
+        "ok": true
+      },
+      {
+        "voucher_no": "0004",
+        "field": "date",
+        "expected": "2025-03-03",
+        "actual": "2025-03-03",
+        "ok": true
+      },
+      {
+        "voucher_no": "0004",
+        "field": "debit_total",
+        "expected": 95000.0,
+        "actual": 95000.0,
+        "ok": true
+      },
+      {
+        "voucher_no": "0004",
+        "field": "account",
+        "expected": "运输费",
+        "actual": "运输费",
+        "ok": true
+      },
+      {
+        "voucher_no": "0007",
+        "field": "voucher_no",
+        "expected": "0007",
+        "actual": "0007",
+        "ok": true
+      },
+      {
+        "voucher_no": "0007",
+        "field": "date",
+        "expected": "2025-03-12",
+        "actual": "2025-03-12",
+        "ok": true
+      },
+      {
+        "voucher_no": "0007",
+        "field": "debit_total",
+        "expected": 23800.0,
+        "actual": 23800.0,
+        "ok": true
+      },
+      {
+        "voucher_no": "0007",
+        "field": "account",
+        "expected": "业务招待费",
+        "actual": "业务招待费",
+        "ok": true
+      },
+      {
+        "voucher_no": "0009",
+        "field": "voucher_no",
+        "expected": "0009",
+        "actual": "0009",
+        "ok": true
+      },
+      {
+        "voucher_no": "0009",
+        "field": "date",
+        "expected": "2025-04-08",
+        "actual": "2025-04-08",
+        "ok": true
+      },
+      {
+        "voucher_no": "0009",
+        "field": "debit_total",
+        "expected": 8640.0,
+        "actual": 8640.0,
+        "ok": true
+      },
+      {
+        "voucher_no": "0009",
+        "field": "account",
+        "expected": "差旅费",
+        "actual": "差旅费",
+        "ok": true
+      },
+      {
+        "voucher_no": "0012",
+        "field": "voucher_no",
+        "expected": "0012",
+        "actual": "0012",
+        "ok": true
+      },
+      {
+        "voucher_no": "0012",
+        "field": "date",
+        "expected": "2025-04-22",
+        "actual": "2025-04-22",
+        "ok": true
+      },
+      {
+        "voucher_no": "0012",
+        "field": "debit_total",
+        "expected": 777777.77,
+        "actual": 777777.77,
+        "ok": true
+      },
+      {
+        "voucher_no": "0012",
+        "field": "account",
+        "expected": "原材料",
+        "actual": "原材料",
+        "ok": true
+      }
+    ]
+  },
+  "matching": {
+    "tp": 6,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tn": 1,
+    "n_cases": 7,
+    "status_accuracy": 1.0,
+    "details": [
+      {
+        "voucher_no": "0001",
+        "expected": "(记)-2025-01-0001",
+        "actual": "(记)-2025-01-0001",
+        "outcome": "对应正确",
+        "status_expected": "MATCHED",
+        "status_actual": "MATCHED"
+      },
+      {
+        "voucher_no": "0002",
+        "expected": "(记)-2025-01-0002",
+        "actual": "(记)-2025-01-0002",
+        "outcome": "对应正确",
+        "status_expected": "MATCHED",
+        "status_actual": "MATCHED"
+      },
+      {
+        "voucher_no": "0003",
+        "expected": "(记)-2025-02-0003",
+        "actual": "(记)-2025-02-0003",
+        "outcome": "对应正确",
+        "status_expected": "AMOUNT_MISMATCH",
+        "status_actual": "AMOUNT_MISMATCH"
+      },
+      {
+        "voucher_no": "0004",
+        "expected": "(记)-2025-02-0004",
+        "actual": "(记)-2025-02-0004",
+        "outcome": "对应正确",
+        "status_expected": "DATE_MISMATCH",
+        "status_actual": "DATE_MISMATCH"
+      },
+      {
+        "voucher_no": "0007",
+        "expected": "(记)-2025-03-0007",
+        "actual": "(记)-2025-03-0007",
+        "outcome": "对应正确",
+        "status_expected": "MATCHED",
+        "status_actual": "MATCHED"
+      },
+      {
+        "voucher_no": "0009",
+        "expected": "(记)-2025-04-0009",
+        "actual": "(记)-2025-04-0009",
+        "outcome": "对应正确",
+        "status_expected": "MATCHED",
+        "status_actual": "MATCHED"
+      },
+      {
+        "voucher_no": "0012",
+        "expected": null,
+        "actual": null,
+        "outcome": "正确判定为无对应",
+        "status_expected": "PDF_ONLY",
+        "status_actual": "PDF_ONLY"
+      }
+    ]
+  },
+  "anomalies": {
+    "tp": 3,
+    "fp": 0,
+    "fn": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "n_vouchers": 7,
+    "false_positive_rate": 0.0,
+    "fp_events": [],
+    "fn_events": [],
+    "predicted_events": [
+      "0003:AMOUNT_MISMATCH",
+      "0004:DATE_MISMATCH",
+      "0012:PDF_ONLY"
+    ],
+    "truth_events": [
+      "0003:AMOUNT_MISMATCH",
+      "0004:DATE_MISMATCH",
+      "0012:PDF_ONLY"
+    ]
+  },
+  "performance": {
+    "e2e_seconds_median": 0.123,
+    "e2e_seconds_min": 0.1,
+    "e2e_seconds_max": 0.47,
+    "peak_memory_mb": 3.7,
+    "repeats": 3,
+    "batch_files": 2,
+    "batch_ok": 2,
+    "batch_failed": 0,
+    "batch_failure_rate": 0.0,
+    "batch_seconds": 0.146
+  },
+  "system_summary": {
+    "total_ledger": 8,
+    "total_pdf": 7,
+    "matched": 4,
+    "date_mismatch": 1,
+    "amount_mismatch": 1,
+    "suspected": 0,
+    "pdf_only": 1,
+    "ocr_uncertain": 0,
+    "ledger_only": 2,
+    "match_rate_pct": 85.7,
+    "strict_match_rate_pct": 57.1
+  }
+}
