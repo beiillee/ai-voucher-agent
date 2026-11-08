@@ -156,8 +156,10 @@ def analyze_excel(path: str | Path) -> dict:
     """
     path = str(path)
     warnings: list[str] = []
-    xls = pd.ExcelFile(path)
-    sheet = xls.sheet_names[0]
+    # 用 with 确保文件句柄关闭：批量处理时若不关，文件多了会耗尽句柄
+    with pd.ExcelFile(path) as xls:
+        sheet_names = list(xls.sheet_names)
+    sheet = sheet_names[0]
     df_raw = pd.read_excel(path, sheet_name=sheet, header=None, dtype=object)
     header_row = detect_header_row(df_raw)
     header = [str(c).strip() for c in df_raw.iloc[header_row].tolist()]

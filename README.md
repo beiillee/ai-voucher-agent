@@ -324,7 +324,7 @@ raw  = 高×10 + 中×4 + 低×1
 │   ├── sample_ledger.xlsx
 │   ├── demo_ledger.xlsx        # 1070 行，埋入 5 类异常
 │   └── demo_recon/             # 账证核对演示集 + labels.json
-├── tests/                      # 86 个用例
+├── tests/                      # 94 个用例
 └── output/
     └── evaluation/             # 评估报告（实测产物）
 ```
@@ -338,7 +338,7 @@ python3 run_tests.py             # 全部用例
 python3 -m unittest tests.test_data_integrity -v   # 单模块
 ```
 
-测试分九组：
+测试分十组：
 
 | 文件 | 覆盖 |
 |---|---|
@@ -350,6 +350,7 @@ python3 -m unittest tests.test_data_integrity -v   # 单模块
 | `test_risk_scoring.py` | 疑似重复、评分可复算、三维度、部门列识别 |
 | `test_report_generator.py` | 7 个 Sheet、表头、非空校验 |
 | `test_evaluation.py` | 评估器自身（TP/FP/FN 归位、is_info 排除） |
+| `test_batch.py` | 多文件隔离、单文件失败不影响整批、未覆盖只算一次 |
 | `test_integration.py` | 端到端 + 演示集逐项比对标注 |
 
 **验收标准写进测试**，例如：
