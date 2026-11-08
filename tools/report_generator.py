@@ -35,7 +35,8 @@ LEVEL_FILL = {
 }
 LEVEL_CN = {"AMOUNT_OUTLIER": "金额离群", "PERIOD_END_CLUSTER": "期末集中入账",
             "WEEKEND_POSTING": "周末入账", "MONTH_SWING": "月度剧烈波动",
-            "DUPLICATE_TRANSACTION": "重复交易", "STRUCTURE_SHIFT": "费用结构变化"}
+            "DUPLICATE_TRANSACTION": "重复交易", "SIMILAR_TRANSACTION": "疑似重复（摘要近似）",
+            "STRUCTURE_SHIFT": "费用结构变化"}
 
 
 def _style_header(ws, n_cols: int) -> None:
@@ -314,6 +315,67 @@ def _write_sheet_risk_overview(wb, risk: dict) -> None:
     _autosize(ws)
 
 
+def _write_sheet_dimensions(wb, risk: dict) -> None:
+    """
+    维度分析：科目 / 月份 / 部门三块。
+
+    只做汇总与占比，不做判断。占比高不等于有问题，异常判断另有风险线索表。
+    """
+    ws = wb.create_sheet("维度分析")
+    dim = risk.get("dimensions") or {}
+    r = 1
+
+    def section(title: str, headers: list[str], rows: list[list]) -> None:
+        nonlocal r
+        ws.cell(row=r, column=1, value=title).font = Font(bold=True, size=12)
+        r += 1
+        for ci, h in enumerate(headers, start=1):
+            c = ws.cell(row=r, column=ci, value=h)
+            c.fill = HEADER_FILL
+            c.font = HEADER_FONT
+            c.alignment = Alignment(horizontal="center")
+        r += 1
+        for row in rows:
+            for ci, v in enumerate(row, start=1):
+                ws.cell(row=r, column=ci, value=v)
+            r += 1
+        r += 1
+
+    by_acc = dim.get("by_account") or []
+    section("一、科目维度（按金额降序）",
+            ["会计科目", "借方金额合计", "分录笔数", "金额占比"],
+            [[a["account"], a["amount"], a["count"], f"{a['share_pct']}%"] for a in by_acc[:50]])
+
+    by_period = dim.get("by_period") or []
+    section("二、月份维度（含环比）",
+            ["会计期间", "借方发生额", "贷方发生额", "分录笔数", "借方环比"],
+            [[p["period"], p["debit"], p["credit"], p["count"],
+              "—" if p.get("mom_pct") is None else f"{p['mom_pct']}%"] for p in by_period])
+
+    by_dep = dim.get("by_department") or []
+    if by_dep:
+        section("三、部门维度",
+                ["部门", "金额合计", "分录笔数", "金额占比"],
+                [[d["department"], d["amount"], d["count"], f"{d['share_pct']}%"]
+                 for d in by_dep[:50]])
+    else:
+        section("三、部门维度",
+                ["说明"], [["原表未提供部门/成本中心列，该维度分析已跳过"]])
+
+    # 风险评分单列一小块，公式一并写出来，避免读者把分数当结论
+    score = risk.get("risk_score") or {}
+    if score:
+        section("四、风险评分（可解释）",
+                ["项目", "取值", "说明"],
+                [["评分", score.get("score"), "0–100，仅用于账套之间粗比，不代表违规概率"],
+                 ["加权原始分", score.get("raw_weight"), "高×10 + 中×4 + 低×1"],
+                 ["线索密度", score.get("density"), "加权原始分 / 记录数 × 100"],
+                 ["计算口径", score.get("formula"), ""]])
+
+    _autosize(ws)
+    ws.column_dimensions["A"].width = 34
+
+
 def generate_report(
     out_path: str | Path,
     reconciliation_result: dict,
@@ -329,6 +391,7 @@ def generate_report(
     if risk_result is not None:
         _write_sheet_risk_clues(wb, risk_result.get("clues", []))
         _write_sheet_risk_overview(wb, risk_result)
+        _write_sheet_dimensions(wb, risk_result)
     _write_sheet_summary(wb, reconciliation_result.get("summary", {}), anomaly_result,
                          risk_result)
     wb.save(out_path)

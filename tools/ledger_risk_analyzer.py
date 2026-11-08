@@ -42,6 +42,8 @@ DUP_MIN_AMOUNT = 1000.0 # 低于此金额的重复不入线索（避免大量小
 STRUCT_SHIFT_PP = 5.0   # 结构占比变动百分点的阈值
 MIN_PERIOD_RECORDS = 20 # 单期间记录数下限，低于此不做结构比较（样本太少易出噪声）
 MAX_CLUES_PER_TYPE = 40 # 单类型线索上限，按偏离强度取前 N
+SIM_SIMILAR_MIN = 0.75  # 同额交易摘要相似度达到此值，报「疑似重复」
+SIM_MAX_BUCKET = 40     # 单个金额桶超过此条数则跳过两两比较，防 O(n²) 拖慢
 
 # 结算类 / 对方科目：它们的金额是业务发生的结果，不是业务本身。
 # 例如银行存款在付款凭证里永远是对方科目，金额跨度可从数千到数百万，
@@ -428,6 +430,87 @@ def _duplicate_transactions(records: list[dict], coverage: dict) -> list[dict]:
     return clues
 
 
+def _similar_transactions(records: list[dict], coverage: dict) -> list[dict]:
+    """
+    疑似重复交易（摘要近似版）。
+
+    精确重复抓的是「金额+摘要+对手方逐字相同」，但实际重复入账常被改一两个字
+    （「采购入库」与「采购入库-补录」）。这里在同一金额桶内两两比摘要相似度，
+    落在 [0.75, 1.0) 的报为疑似，等级低于精确重复。
+
+    O(n²) 只在单个金额桶内做，桶过大（>SIM_MAX_BUCKET）直接跳过并记录，
+    避免大批量小额同额交易把耗时拖垮。
+    """
+    from difflib import SequenceMatcher
+
+    buckets: dict[float, list[dict]] = defaultdict(list)
+    for r in records:
+        a = _amt(r)
+        summ = _norm_text(r.get("summary"))
+        if a < DUP_MIN_AMOUNT or not summ:
+            continue
+        buckets[round(a, 2)].append(r)
+
+    clues: list[dict] = []
+    checked = 0
+    skipped = 0
+    for amount, rows in buckets.items():
+        if len(rows) < 2:
+            continue
+        if len(rows) > SIM_MAX_BUCKET:
+            skipped += 1
+            continue
+        checked += 1
+        seen_pairs: set[tuple[int, int]] = set()
+        for i in range(len(rows)):
+            for j in range(i + 1, len(rows)):
+                ri, rj = rows[i], rows[j]
+                vi, vj = str(ri.get("voucher_no") or ""), str(rj.get("voucher_no") or "")
+                if not vi or vi == vj:       # 同一张凭证内的分录不构成重复入账
+                    continue
+                si = _norm_text(ri.get("summary"))
+                sj = _norm_text(rj.get("summary"))
+                if not si or not sj or si == sj:
+                    continue              # 完全相同的情况由精确检测负责
+                sim = SequenceMatcher(None, si, sj).ratio()
+                if sim < SIM_SIMILAR_MIN:
+                    continue
+                key = (min(i, j), max(i, j))
+                if key in seen_pairs:
+                    continue
+                seen_pairs.add(key)
+                pi, pj = _period_key(ri), _period_key(rj)
+                same_period = pi == pj
+                clues.append(_clue(
+                    type="SIMILAR_TRANSACTION",
+                    level="中" if same_period else "低",
+                    title="同额近似摘要交易",
+                    account="、".join(sorted({str(ri.get("account") or ""),
+                                              str(rj.get("account") or "")} - {""})[:3]),
+                    period=f"{pi}、{pj}" if not same_period else pi,
+                    voucher_no=f"{vi}、{vj}",
+                    amount=round(amount, 2),
+                    peer_group="同一金额桶内、摘要相似但不相同的分录",
+                    peer_n=len(rows),
+                    baseline=f"金额 {_fmt_money(amount)}；摘要「{si}」/「{sj}」",
+                    deviation=f"摘要相似度 {sim:.2f}",
+                    method="同额分桶 + 摘要序列相似度（0.75 ≤ 相似度 < 1）",
+                    reason=(
+                        "两笔金额一致、摘要高度相似但并非完全相同，可能是同一业务重复入账，"
+                        "也可能是描述方式不同的两笔独立业务（如分次采购），需看原始附件。"
+                    ),
+                    next_step=(
+                        "调阅两张凭证的原始单据与付款记录，核对是否为同一笔业务；"
+                        "若为分次业务，确认合同或验收单能否支持两次独立发生。"
+                    ),
+                    evidence=f"凭证 {vi}、{vj}",
+                    _score=sim * (2.0 if same_period else 1.0),
+                ))
+    coverage["similar_buckets_checked"] = checked
+    coverage["similar_buckets_skipped"] = skipped
+    return clues
+
+
 # --------------------------------------------------------------------------
 # D. 结构变化
 # --------------------------------------------------------------------------
@@ -514,14 +597,109 @@ def _structure_shift(records: list[dict], coverage: dict) -> tuple[list[dict], l
 # 主入口
 # --------------------------------------------------------------------------
 LEVEL_ORDER = {"高": 0, "中": 1, "低": 2}
+# 风险评分的权重：只做「线索轻重」的量化，不代表违规概率，也不对外称风险等级
+LEVEL_WEIGHT = {"高": 10, "中": 4, "低": 1}
 TYPE_ORDER = {
     "DUPLICATE_TRANSACTION": 0,
-    "AMOUNT_OUTLIER": 1,
-    "PERIOD_END_CLUSTER": 2,
-    "STRUCTURE_SHIFT": 3,
-    "MONTH_SWING": 4,
-    "WEEKEND_POSTING": 5,
+    "SIMILAR_TRANSACTION": 1,
+    "AMOUNT_OUTLIER": 2,
+    "PERIOD_END_CLUSTER": 3,
+    "STRUCTURE_SHIFT": 4,
+    "MONTH_SWING": 5,
+    "WEEKEND_POSTING": 6,
 }
+
+
+def _dimensions(records: list[dict], structure: list[dict]) -> dict:
+    """
+    科目 / 月份 / 部门 三个维度的汇总，供前端画图与人工快速定位。
+
+    只做汇总与占比，不做判断：占比高不等于有问题，异常线索另有专用分析。
+    """
+    total_amt = sum(_amt(r) for r in records) or 1.0
+
+    # 科目维度
+    acc: dict[str, dict] = defaultdict(lambda: {"amount": 0.0, "count": 0})
+    for r in records:
+        a = r.get("account")
+        if not a:
+            continue
+        amt = _amt(r)
+        acc[a]["amount"] += amt
+        acc[a]["count"] += 1
+    by_account = sorted(
+        [{"account": k, "amount": round(v["amount"], 2), "count": v["count"],
+          "share_pct": round(v["amount"] / total_amt * 100, 1)}
+         for k, v in acc.items()],
+        key=lambda x: -x["amount"])
+
+    # 月份维度（含环比）
+    mon: dict[str, dict] = defaultdict(lambda: {"debit": 0.0, "credit": 0.0, "count": 0})
+    for r in records:
+        p = _period_key(r)
+        mon[p]["debit"] += float(r.get("debit") or 0.0)
+        mon[p]["credit"] += float(r.get("credit") or 0.0)
+        mon[p]["count"] += 1
+    by_period: list[dict] = []
+    prev = None
+    for p in sorted(mon):
+        v = mon[p]
+        mom = None
+        if prev is not None and prev > 0:
+            mom = round((v["debit"] - prev) / prev * 100, 1)
+        by_period.append({
+            "period": p, "debit": round(v["debit"], 2),
+            "credit": round(v["credit"], 2), "count": v["count"],
+            "mom_pct": mom,
+        })
+        prev = v["debit"]
+
+    # 部门维度（原表无该列时返回空，并说明原因）
+    dep: dict[str, dict] = defaultdict(lambda: {"amount": 0.0, "count": 0})
+    for r in records:
+        d = r.get("department")
+        if not d:
+            continue
+        dep[d]["amount"] += _amt(r)
+        dep[d]["count"] += 1
+    by_department = sorted(
+        [{"department": k, "amount": round(v["amount"], 2), "count": v["count"],
+          "share_pct": round(v["amount"] / total_amt * 100, 1)}
+         for k, v in dep.items()],
+        key=lambda x: -x["amount"])
+
+    return {
+        "by_account": by_account,
+        "by_period": by_period,
+        "by_department": by_department,
+        "has_department": bool(by_department),
+        "n_accounts": len(by_account),
+        "structure": structure,
+    }
+
+
+def _risk_score(by_level: dict, n_records: int) -> dict:
+    """
+    可解释的风险评分。
+
+    公式：raw = 高×10 + 中×4 + 低×1
+          密度 = raw / 记录数 × 100
+          分数 = min(100, 密度 × 2)
+
+    用途只是把「线索多不多、重不重」折算成一个可比的数，便于不同账套之间粗比；
+    它不代表违规概率，也不构成审计结论。公式与权重随结果一起返回，便于复核。
+    """
+    raw = sum(LEVEL_WEIGHT.get(k, 0) * v for k, v in by_level.items())
+    density = round(raw / n_records * 100, 2) if n_records else 0.0
+    score = round(min(100.0, density * 2), 1)
+    return {
+        "score": score,
+        "raw_weight": raw,
+        "density": density,
+        "formula": "raw=高×10+中×4+低×1; 密度=raw/记录数×100; 分数=min(100, 密度×2)",
+        "level_weight": dict(LEVEL_WEIGHT),
+        "disclaimer": "分数仅用于不同账套之间粗略比较，不代表违规概率或审计结论",
+    }
 
 
 def analyze_ledger_risk(records: list[dict], vouchers: list[dict] | None = None,
@@ -550,9 +728,10 @@ def analyze_ledger_risk(records: list[dict], vouchers: list[dict] | None = None,
     c_amount = _amount_outliers(records, coverage)
     c_time = _temporal_anomalies(records, bool(has_date_dim), coverage)
     c_dup = _duplicate_transactions(records, coverage)
+    c_sim = _similar_transactions(records, coverage)
     c_struct, structure = _structure_shift(records, coverage)
 
-    all_clues: list[dict] = c_amount + c_time + c_dup + c_struct
+    all_clues: list[dict] = c_amount + c_time + c_dup + c_sim + c_struct
 
     # 单类型截断：保留偏离强度最高的若干条
     by_type_raw: dict[str, list[dict]] = defaultdict(list)
@@ -583,15 +762,20 @@ def analyze_ledger_risk(records: list[dict], vouchers: list[dict] | None = None,
         for p, v in sorted(monthly_map.items())
     ]
 
+    by_level_d = {k: by_level.get(k, 0) for k in ("高", "中", "低")}
+    dimensions = _dimensions(records, structure)
+
     return {
         "clues": trimmed,
         "n_clues": len(trimmed),
         "n_clues_before_trim": len(all_clues),
-        "by_level": {k: by_level.get(k, 0) for k in ("高", "中", "低")},
+        "by_level": by_level_d,
         "by_type": dict(by_type),
         "coverage": coverage,
         "structure": structure,
         "monthly": monthly,
+        "dimensions": dimensions,
+        "risk_score": _risk_score(by_level_d, len(records)),
     }
 
 

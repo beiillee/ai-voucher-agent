@@ -146,18 +146,19 @@ class TestReportGeneratorWithoutRisk(unittest.TestCase):
 
 
 class TestReportGeneratorWithRisk(unittest.TestCase):
-    """传入风险结果时，应输出 6 个 Sheet，且风险两张表内容完整。"""
+    """传入风险结果时，应输出 7 个 Sheet，且风险两张表内容完整。"""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.path = os.path.join(self.tmp, "out.xlsx")
         generate_report(self.path, RECON, ANOM, RISK)
 
-    def test_six_sheets(self):
+    def test_seven_sheets(self):
         wb = openpyxl.load_workbook(self.path)
         self.assertListEqual(
             wb.sheetnames,
-            ["核对结果", "异常清单", "未匹配序时账", "风险线索", "风险概览", "统计汇总"])
+            ["核对结果", "异常清单", "未匹配序时账", "风险线索", "风险概览",
+             "维度分析", "统计汇总"])
 
     def test_risk_clue_headers(self):
         ws = openpyxl.load_workbook(self.path)["风险线索"]

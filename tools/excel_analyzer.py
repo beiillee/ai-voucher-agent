@@ -28,7 +28,7 @@ import pandas as pd
 STANDARD_FIELDS = [
     "period", "doc_date", "voucher_type", "voucher_no", "line_no", "summary",
     "account", "debit", "credit", "cash_flow", "status",
-    "maker", "checker", "booker", "counterparty",
+    "maker", "checker", "booker", "counterparty", "department",
 ]
 
 # ---- 列名关键词 -> 标准字段（最长优先匹配）----
@@ -48,6 +48,8 @@ COLUMN_KEYWORDS = {
     "checker": ["审核人", "审核", "复核"],
     "booker": ["记账人", "记账"],
     "counterparty": ["交易对手", "供应商", "客户", "对方科目", "往来单位"],
+    # 部门维度：真实序时账不一定有，没有时维度分析自动跳过并注明
+    "department": ["使用部门", "核算部门", "成本中心", "部门", "事业部"],
 }
 
 # 从 摘要/会计科目 文本中抽取交易对手公司名（best-effort）
