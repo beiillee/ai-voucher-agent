@@ -37,3 +37,5 @@ output/_perf*/
 # 网页上传与运行产物
 output/web/
 output/uploads/
+# 脱敏产物：源自真实凭证，即使处理过也不入库
+output/desensitized/
